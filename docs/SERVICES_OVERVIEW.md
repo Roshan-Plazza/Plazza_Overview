@@ -93,16 +93,16 @@ interface PrescriptionResult {
 sequenceDiagram
     participant U as User
     participant CS as Catalogue Service
+    participant ES as Elasticsearch
     participant AWS as AWS Textract
     participant Claude as Claude AI
-    participant ES as Elasticsearch
 
     U->>CS: Upload Prescription
     CS->>AWS: Extract Text
     AWS-->>CS: OCR Result
     CS->>Claude: Analyze Prescription
     Claude-->>CS: Structured Data
-    CS->>ES: Search Medicines
+    CS->>ES: Search Products
     ES-->>CS: Matched Products
     CS-->>U: Product Recommendations
 ```
@@ -177,18 +177,16 @@ sequenceDiagram
     participant U as User
     participant PS as Payment Service
     participant RP as Razorpay
-    participant OS as Order Service
-    participant WS as WhatsApp Service
+    participant FRDB as Firebase RTDB
 
     U->>PS: Initiate Payment
     PS->>RP: Create Order
     RP-->>PS: Order Details
+    PS->>FRDB: Store Payment Details
     PS-->>U: Payment Link
     U->>RP: Complete Payment
     RP->>PS: Payment Webhook
-    PS->>OS: Update Order Status
-    PS->>WS: Send Notification
-    PS-->>U: Payment Status
+    PS->>FRDB: Update Payment Status
 ```
 
 ## 3. Order Service
@@ -271,21 +269,17 @@ interface AirtableOrder {
 sequenceDiagram
     participant U as User
     participant OS as Order Service
-    participant CS as Catalogue Service
-    participant PS as Payment Service
-    participant LS as Location Service
-    participant DS as Discount Service
+    participant CDB as CockroachDB
+    participant AT as Airtable
 
     U->>OS: Create Order
-    OS->>CS: Validate Products
-    CS-->>OS: Product Validation
-    OS->>LS: Check Serviceability
-    LS-->>OS: Serviceability Status
-    OS->>DS: Apply Discount
-    DS-->>OS: Discount Applied
-    OS->>PS: Create Payment
-    PS-->>OS: Payment Link
+    OS->>CDB: Store Order
+    OS->>AT: Sync Order Data
     OS-->>U: Order Created
+    
+    Note over OS,AT: Periodic Sync
+    OS->>CDB: Read Orders
+    OS->>AT: Update Status
 ```
 
 ## 4. Location Service
@@ -354,6 +348,26 @@ interface ServiceableArea {
 }
 ```
 
+### Flow Diagram
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant LS as Location Service
+    participant PG as PostgreSQL
+    participant GM as Google Maps
+
+    U->>LS: Create Address
+    LS->>GM: Validate Address
+    GM-->>LS: Coordinates
+    LS->>PG: Store Address
+    LS-->>U: Address Created
+
+    U->>LS: Check Serviceability
+    LS->>PG: Query Service Areas
+    PG-->>LS: Area Details
+    LS-->>U: Serviceability Status
+```
+
 ## 5. User Events Service
 
 ### Main Function
@@ -397,6 +411,23 @@ interface Event {
     event_data: Record<string, any>;
     timestamp: timestamp;
 }
+```
+
+### Flow Diagram
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant UE as User Events Service
+    participant FRDB as Firebase RTDB
+
+    U->>UE: User Action
+    UE->>FRDB: Store Event
+    FRDB-->>UE: Confirmation
+    UE-->>U: Event Tracked
+
+    Note over UE,FRDB: Session Management
+    UE->>FRDB: Update Session
+    FRDB-->>UE: Session Status
 ```
 
 ## 6. Discount Service
@@ -453,6 +484,20 @@ interface CouponUsage {
 }
 ```
 
+### Flow Diagram
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant DS as Discount Service
+    participant PG as PostgreSQL
+
+    U->>DS: Apply Coupon
+    DS->>PG: Validate Coupon
+    PG-->>DS: Coupon Details
+    DS->>PG: Update Usage
+    DS-->>U: Discount Applied
+```
+
 ## 7. Database Operations Service
 
 ### Main Function
@@ -492,6 +537,21 @@ interface VendorProduct {
 }
 ```
 
+### Flow Diagram
+```mermaid
+sequenceDiagram
+    participant DBS as DB Ops Service
+    participant CDB as CockroachDB
+    participant ES as Elasticsearch
+    participant AT as Airtable
+
+    Note over DBS: Scheduled Sync
+    DBS->>AT: Fetch Products
+    AT-->>DBS: Product Data
+    DBS->>CDB: Update Products
+    DBS->>ES: Update Search Index
+```
+
 ## 8. WhatsApp Service
 
 ### Main Function
@@ -524,6 +584,21 @@ interface WhatsAppMessage {
     delivered_at?: timestamp;
     created_at: timestamp;
 }
+```
+
+### Flow Diagram
+```mermaid
+sequenceDiagram
+    participant WS as WhatsApp Service
+    participant FRDB as Firebase RTDB
+    participant WA as WhatsApp API
+
+    Note over WS: Event Trigger
+    WS->>FRDB: Read Notification Queue
+    FRDB-->>WS: Pending Messages
+    WS->>WA: Send Message
+    WA-->>WS: Delivery Status
+    WS->>FRDB: Update Status
 ```
 
 ## 9. Point of Sale Service
@@ -580,6 +655,19 @@ interface StoreInventory {
 }
 ```
 
+### Flow Diagram
+```mermaid
+sequenceDiagram
+    participant C as Cashier
+    participant POS as POS Service
+    participant PG as PostgreSQL
+
+    C->>POS: Create Transaction
+    POS->>PG: Store Transaction
+    POS->>PG: Update Inventory
+    POS-->>C: Transaction Complete
+```
+
 ## 10. Proof of Delivery Service
 
 ### Main Function
@@ -633,6 +721,18 @@ interface DeliveryProof {
     timestamp: timestamp;
     notes?: string;
 }
+```
+
+### Flow Diagram
+```mermaid
+sequenceDiagram
+    participant DA as Delivery Agent
+    participant POD as POD Service
+    participant FRDB as Firebase RTDB
+
+    DA->>POD: Submit Delivery Proof
+    POD->>FRDB: Store Proof
+    POD-->>DA: Confirmation
 ```
 
 Would you like me to:
